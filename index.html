@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Lecture – Les 4 Accords Toltèques</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background: linear-gradient(135deg,#6a11cb,#2575fc); margin:0; padding:20px;
+  display:flex; justify-content:center; align-items:flex-start; min-height:100vh;}
+.card{background:white; padding:25px; border-radius:18px; max-width:420px; width:100%;
+  box-shadow:0 10px 30px rgba(0,0,0,0.2); margin-bottom:20px;}
+h2{text-align:center;margin-bottom:20px;}
+input{width:100%;padding:12px;border-radius:10px;border:1px solid #ddd;margin-bottom:20px;font-size:16px;}
+.question{margin-bottom:18px;}
+.answers button{display:block;width:100%;margin:6px 0;padding:12px;border-radius:10px;border:none;
+  background:#f1f3f6;cursor:pointer;transition:.2s;font-size:15px;}
+.answers button:hover{background:#e0e4ea;}
+.answers button.selected{background:#2575fc;color:white;}
+.submit{margin-top:15px;width:100%;padding:14px;border:none;border-radius:12px;
+  background:#6a11cb;color:white;font-size:16px;cursor:pointer;}
+.submit:hover{background:#5710a5;}
+#timer{text-align:center;font-size:18px;font-weight:bold;margin-bottom:15px;color:#6a11cb;}
+#score{text-align:center;font-size:18px;font-weight:bold;margin-top:15px;}
+#leaderboard{max-width:420px;margin:20px auto;background:white;padding:20px;
+  border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,0.2);
+  overflow-x:auto;width:100%;box-sizing:border-box;}
+#leaderboard h2{text-align:center;margin-bottom:15px;font-size:18px;}
+#leaderboard table{width:100%;border-collapse:collapse;min-width:280px;font-size:14px;}
+#leaderboard th,#leaderboard td{padding:8px;border-bottom:1px solid #ddd;text-align:left;}
+#leaderboard th{background:#6a11cb;color:white;border-radius:8px;font-size:13px;}
+#leaderboard tr:nth-child(even){background:#f9f9f9;}
+@media(max-width:480px){
+  body{padding:10px;flex-direction:column;align-items:center;}
+  .card,#leaderboard{max-width:100%;padding:15px;margin-bottom:15px;}
+  #leaderboard{order:2;}
+  h2{font-size:18px;}
+  input,.answers button,.submit{font-size:14px;padding:10px;}
+  #leaderboard table{font-size:12px;}
+  #leaderboard th,#leaderboard td{padding:6px;}
+  #timer{font-size:16px;}
+}
+</style>
+</head>
+<body>
+
+<div class="card">
+<h2>📖 Test Lecture du Jour</h2>
+<div id="timer">05:00</div>
+<input type="text" id="name" placeholder="Ton prénom">
+
+<!-- Questions dynamiques -->
+<div id="quizContainer"></div>
+
+<button class="submit" onclick="submitTest()">Envoyer mes réponses</button>
+<div id="score"></div>
+</div>
+
+<!-- Classement -->
+<div id="leaderboard">
+<h2>🏆 Classement Lecteurs</h2>
+<table>
+<thead>
+<tr><th>#</th><th>Nom</th><th>Score</th></tr>
+</thead>
+<tbody id="ranking">
+<tr><td colspan="3">Chargement...</td></tr>
+</tbody>
+</table>
+</div>
+
+<script>
+// URL de ton Web App GAS
+const scriptURL = "https://script.google.com/macros/s/AKfycbyNN8gTd6cpZThuQNF-6aetpWxE7Su-c4MJdmBTlsuXtWWbQgewQnWJ8DemzRAjqU4/exec"; 
+
+const quizContainer = document.getElementById("quizContainer");
+let questions = [];
+const selections = [];
+
+// Charger questions depuis GAS
+fetch(scriptURL + "?type=questions")
+.then(res => res.json())
+.then(data => {
+  questions = data;
+  questions.forEach((q,i) => {
+    selections.push("");
+    const qDiv = document.createElement("div");
+    qDiv.classList.add("question");
+    qDiv.dataset.q = i;
+    let html = `<p>${i+1}. ${q.question}</p><div class="answers">`;
+    q.answers.forEach(ans => {
+      html += `<button>${ans}</button>`;
+    });
+    html += `</div>`;
+    qDiv.innerHTML = html;
+    quizContainer.appendChild(qDiv);
+
+    // Écoute boutons
+    const buttons = qDiv.querySelectorAll("button");
+    buttons.forEach(btn => {
+      btn.onclick = () => {
+        buttons.forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        selections[i] = btn.innerText;
+      }
+    });
+  });
+});
+
+// Minuteur 5 min
+let timeLeft = 5*60;
+const timerEl = document.getElementById("timer");
+const scoreEl = document.getElementById("score");
+const timerInterval = setInterval(() => {
+  let m=Math.floor(timeLeft/60), s=timeLeft%60;
+  timerEl.innerText = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+  if(timeLeft <=0){clearInterval(timerInterval); alert("⏰ Temps écoulé !"); submitTest();}
+  timeLeft--;
+}, 1000);
+
+// Envoyer test
+function submitTest(){
+  clearInterval(timerInterval);
+  const name = document.getElementById("name").value.trim();
+  if(!name){alert("Entre ton prénom"); return;}
+  if(selections.includes("")){alert("Réponds à toutes les questions"); return;}
+
+  let score = 0;
+  selections.forEach((a,i)=>{ if(a === questions[i].correctAnswer) score++; });
+  scoreEl.innerText = `🎯 Ton score : ${score} / ${questions.length}`;
+
+  document.querySelectorAll(".answers button").forEach(b=>b.disabled=true);
+  document.querySelector(".submit").disabled=true;
+
+  // Envoi POST vers GAS
+  fetch(scriptURL,{
+    method:"POST",
+    mode:"no-cors",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      name,
+      answers: selections,
+      correctAnswers: questions.map(q=>q.correctAnswer),
+      score
+    })
+  }).then(()=>console.log("✅ Test envoyé !"))
+  .catch(()=>console.log("Erreur d’envoi"));
+
+  fetchRanking();
+}
+
+// Classement
+function fetchRanking(){
+  fetch(scriptURL)
+  .then(res=>res.json())
+  .then(data=>{
+    const tbody = document.getElementById("ranking");
+    tbody.innerHTML="";
+    if(data.length===0){tbody.innerHTML=`<tr><td colspan="3">Aucun score</td></tr>`; return;}
+    data.forEach((row,i)=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`<td>${i+1}</td><td>${row.Nom}</td><td>${row.Score}</td>`;
+      tbody.appendChild(tr);
+    });
+  }).catch(err=>console.log("Erreur fetch classement:",err));
+}
+
+// Actualisation toutes les 10s
+fetchRanking();
+setInterval(fetchRanking,10000);
+</script>
+
+</body>
+</html>
